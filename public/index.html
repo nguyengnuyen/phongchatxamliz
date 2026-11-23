@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Phòng Chat Nhóm</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>
+:root{color-scheme:dark;--bg:#0f1115;--panel:#181b22;--line:#262a33;--text:#e6e8ee;--mute:#8b93a3;--acc:#4f8cff;--me:#1f3a6b}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.screen{height:100%;display:flex;flex-direction:column}
+#join{align-items:center;justify-content:center;gap:12px;padding:20px}
+#join h1{margin:0 0 4px;font-size:22px}
+input,button{font:inherit;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--text);padding:11px 14px}
+input{outline:none;min-width:0}input:focus{border-color:var(--acc)}
+button{cursor:pointer;background:var(--acc);border-color:var(--acc);color:#fff}
+button.ghost{background:transparent;color:var(--mute);border-color:var(--line);padding:7px 10px;font-size:13px}
+#join input{width:min(320px,100%)}
+header{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+.online{color:var(--mute);font-size:13px}
+#messages-container{flex:1;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.msg{max-width:min(560px,88%);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;align-self:flex-start;overflow-wrap:anywhere}
+.msg.me{align-self:flex-end;background:var(--me);border-color:#2b4d8c}
+.meta{font-size:12px;color:var(--mute);margin-bottom:2px}.meta b{color:var(--acc)}
+.empty{color:var(--mute);text-align:center;margin:auto}
+.bar{display:flex;gap:8px;padding:10px 14px calc(10px + env(safe-area-inset-bottom,0px));border-top:1px solid var(--line);background:var(--panel)}
+.bar input{flex:1}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div id="join" class="screen">
+  <h1>Phòng Chat Nhóm</h1>
+  <input id="username-input" maxlength="24" placeholder="Tên hiển thị" autocomplete="off">
+  <button id="join-btn">Vào phòng</button>
+</div>
+<div id="chat" class="screen hidden">
+  <header>
+    <div><b>Phòng Chat Nhóm</b> <span class="online" id="online">● 1 online</span></div>
+    <button class="ghost" id="clear-btn">Xóa lịch sử chat</button>
+  </header>
+  <div id="messages-container"></div>
+  <div class="bar">
+    <input id="message-input" maxlength="500" placeholder="Nhập tin nhắn…" autocomplete="off">
+    <button id="send-btn">Gửi</button>
+  </div>
+</div>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+const box = $("messages-container");
+let name = "", socket = null, list = [];
+
+function render() {
+  box.textContent = "";
+  if (!list.length) { const e = document.createElement("div"); e.className = "empty"; e.textContent = "Chưa có tin nhắn nào."; box.appendChild(e); return; }
+  for (const m of list) {
+    const d = document.createElement("div");
+    d.className = "msg" + (m.sender === name ? " me" : "");
+    const meta = document.createElement("div"); meta.className = "meta";
+    const b = document.createElement("b"); b.textContent = m.sender;
+    const t = new Date(m.ts);
+    meta.append(b, " · " + t.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }));
+    const body = document.createElement("div"); body.textContent = m.text;
+    d.append(meta, body); box.appendChild(d);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+function join(n) {
+  name = n; sessionStorage.setItem("username", n);
+  $("join").classList.add("hidden"); $("chat").classList.remove("hidden");
+  socket = io();
+  socket.on("history", h => { list = h; render(); });
+  socket.on("message", m => { list.push(m); if (list.length > 100) list.shift(); render(); });
+  socket.on("online", n => $("online").textContent = "● " + n + " online");
+  $("message-input").focus();
+}
+function send() {
+  const i = $("message-input"), text = i.value.trim();
+  if (!text || !socket) return;
+  socket.emit("message", { sender: name, text }); i.value = "";
+}
+$("join-btn").onclick = () => { const n = $("username-input").value.trim(); if (n) join(n); };
+$("username-input").onkeydown = e => { if (e.key === "Enter") $("join-btn").click(); };
+$("send-btn").onclick = send;
+$("message-input").onkeydown = e => { if (e.key === "Enter") send(); };
+$("clear-btn").onclick = () => { if (confirm("Xóa toàn bộ lịch sử chat?")) socket.emit("clear"); };
+const saved = sessionStorage.getItem("username");
+if (saved) { $("username-input").value = saved; join(saved); }
+</script>
+</body>
+</html>
